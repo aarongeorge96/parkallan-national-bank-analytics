@@ -1,0 +1,11 @@
+product_id,product_name,product_category,product_type,is_credit,interest_rate_type,typical_term_months,risk_tier,min_income_required,is_registered,is_active_product,monthly_fee
+1,Chequing Account,Deposit,Everyday Banking,False,None,0,Low,0,False,True,16.95
+2,Savings Account,Deposit,Everyday Banking,False,Variable,0,Low,0,False,True,0.0
+3,GIC,Investment,Term Investment,False,Fixed,12,Low,0,False,True,0.0
+4,TFSA,Investment,Registered,False,Variable,0,Low,0,True,True,0.0
+5,RRSP,Investment,Registered,False,Variable,0,Low,0,True,True,0.0
+6,Credit Card,Credit,Revolving Credit,True,Fixed,0,Medium,30000,False,True,0.0
+7,Personal Loan,Credit,Unsecured Credit,True,Fixed,60,Medium,30000,False,True,0.0
+8,Mortgage,Credit,Secured Credit,True,Fixed,300,High,60000,False,True,0.0
+9,HELOC,Credit,Secured Credit,True,Variable,0,High,60000,False,True,0.0
+10,Overdraft Protection,Credit,Everyday Banking,True,Fixed,0,Low,0,False,True,4.95
