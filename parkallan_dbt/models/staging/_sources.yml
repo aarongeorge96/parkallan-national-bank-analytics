@@ -1,0 +1,29 @@
+version: 2
+
+sources:
+  - name: parkallan_national_bank
+    database: parkallan-analytics
+    schema: parkallan_national_bank
+    description: Raw tables loaded from synthetic data generation, representing Parkallan National Bank's retail banking data.
+
+    tables:
+      - name: dim_customers
+        description: Customer demographic information including segment, income bracket, and acquisition channel.
+
+      - name: dim_products
+        description: Parkallan product catalogue (chequing, savings, GICs, TFSAs, RRSPs, credit cards, loans, mortgages, HELOCs).
+
+      - name: dim_location
+        description: Branch and customer address locations across Canadian provinces and territories.
+
+      - name: dim_date
+        description: Full date dimension for 2022 and 2023, including fiscal quarters and Canadian statutory holidays.
+
+      - name: fact_accounts
+        description: Every product account held by each customer, including balances and account status.
+
+      - name: fact_transactions
+        description: 500,000 individual customer transactions across POS, online, ATM, mobile, and branch channels.
+
+      - name: fact_loans
+        description: Full loan lifecycle from application through repayment, including delinquency status.

@@ -1,3 +1,7 @@
-"parkallan_data/" 
-"*.csv" 
-"*.csv" 
+parkallan_data/
+*.csv
+*.csv
+.secrets/
+target/
+logs/
+dbt_packages/

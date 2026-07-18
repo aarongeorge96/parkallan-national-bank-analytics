@@ -1,0 +1,247 @@
+version: 2
+
+models:
+  # ------------------------------------------------------------------
+  - name: stg_customers
+    description: Staged customer demographic data, one row per customer.
+    columns:
+      - name: customer_id
+        tests: [unique, not_null]
+
+      - name: location_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_location')
+              field: location_id
+
+      - name: customer_segment
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Mass Market', 'Emerging Affluent', 'High Net Worth', 'Private Banking']
+
+      - name: is_active
+        tests: [not_null]
+
+  # ------------------------------------------------------------------
+  - name: stg_date
+    description: Staged date dimension, one row per calendar day.
+    columns:
+      - name: date_id
+        tests: [unique, not_null]
+
+      - name: full_date
+        tests: [unique, not_null]
+
+  # ------------------------------------------------------------------
+  - name: stg_location
+    description: Staged branch and address location data.
+    columns:
+      - name: location_id
+        tests: [unique, not_null]
+
+      - name: province
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Alberta', 'British Columbia', 'Manitoba', 'New Brunswick',
+                       'Newfoundland and Labrador', 'Northwest Territories', 'Nova Scotia',
+                       'Nunavut', 'Ontario', 'Prince Edward Island', 'Quebec',
+                       'Saskatchewan', 'Yukon']
+
+      - name: region
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Atlantic Canada', 'Central Canada', 'Northern', 'Prairie', 'Western Canada']
+
+      - name: is_branch
+        tests: [not_null]
+
+  # ------------------------------------------------------------------
+  - name: stg_products
+    description: Staged product catalogue.
+    columns:
+      - name: product_id
+        tests: [unique, not_null]
+
+      - name: product_category
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Credit', 'Deposit', 'Investment']
+
+      - name: risk_tier
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['High', 'Low', 'Medium']
+
+  # ------------------------------------------------------------------
+  - name: stg_accounts
+    description: Staged account-level fact table, one row per product account.
+    columns:
+      - name: account_id
+        tests: [unique, not_null]
+
+      - name: customer_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_customers')
+              field: customer_id
+
+      - name: product_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_products')
+              field: product_id
+
+      - name: location_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_location')
+              field: location_id
+
+      - name: open_date_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_date')
+              field: date_id
+
+      - name: close_date_id
+        # nullable: only closed accounts have a close date
+        tests:
+          - relationships:
+              to: ref('stg_date')
+              field: date_id
+              config:
+                where: "close_date_id is not null"
+
+      - name: account_status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Active', 'Closed']
+
+  # ------------------------------------------------------------------
+  - name: stg_loans
+    description: Staged loan lifecycle fact table, one row per loan application.
+    columns:
+      - name: loan_id
+        tests: [unique, not_null]
+
+      - name: customer_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_customers')
+              field: customer_id
+
+      - name: product_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_products')
+              field: product_id
+
+      - name: location_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_location')
+              field: location_id
+
+      - name: application_date_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_date')
+              field: date_id
+
+      - name: approval_date_id
+        # nullable: only approved loans have an approval date (pending/rejected do not)
+        tests:
+          - relationships:
+              to: ref('stg_date')
+              field: date_id
+              config:
+                where: "approval_date_id is not null"
+
+      - name: approval_status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Approved', 'Pending', 'Rejected']
+
+      - name: interest_rate_type
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Fixed', 'Variable']
+
+      - name: is_secured
+        tests: [not_null]
+
+  # ------------------------------------------------------------------
+  - name: stg_transactions
+    description: Staged transaction fact table, one row per individual transaction.
+    columns:
+      - name: transaction_id
+        tests: [unique, not_null]
+
+      - name: account_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_accounts')
+              field: account_id
+
+      - name: customer_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_customers')
+              field: customer_id
+
+      - name: date_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_date')
+              field: date_id
+
+      - name: location_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_location')
+              field: location_id
+
+      - name: transaction_type
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Credit', 'Debit']
+
+      - name: transaction_status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Completed', 'Failed', 'Reversed']
+
+      - name: currency
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['CAD', 'USD']
+
+      - name: channel
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['ATM', 'Branch', 'Mobile', 'Online', 'POS']
