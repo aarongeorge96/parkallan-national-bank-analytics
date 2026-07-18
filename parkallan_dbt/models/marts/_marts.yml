@@ -1,0 +1,114 @@
+version: 2
+
+models:
+  # ------------------------------------------------------------------
+  - name: mart_segment_profitability
+    description: Customer segment-level profitability rollup.
+    columns:
+      - name: customer_segment
+        tests: [unique, not_null]
+
+  # ------------------------------------------------------------------
+  - name: mart_product_adoption
+    description: Product-level adoption metrics.
+    columns:
+      - name: product_id
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_products')
+                field: product_id
+
+  # ------------------------------------------------------------------
+  - name: mart_product_crosssell_pairs
+    description: Product pair cross-sell matrix. Grain (product_id_1, product_id_2) checked via a singular test.
+    columns:
+      - name: product_id_1
+        tests: [not_null]
+      - name: product_id_2
+        tests: [not_null]
+      - name: customer_count
+        tests: [not_null]
+
+  # ------------------------------------------------------------------
+  - name: mart_churn_risk
+    description: Customer-level churn risk flag and reason.
+    columns:
+      - name: customer_id
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_customers')
+                field: customer_id
+      - name: is_churn_risk
+        tests: [not_null]
+
+  # ------------------------------------------------------------------
+  - name: mart_branch_performance
+    description: Branch-level balance and transaction performance.
+    columns:
+      - name: location_id
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_location')
+                field: location_id
+
+  # ------------------------------------------------------------------
+  - name: mart_monthly_transaction_trends
+    description: Monthly transaction volume and MoM growth. Grain (year, month) checked via a singular test.
+    columns:
+      - name: year
+        tests: [not_null]
+      - name: month
+        tests: [not_null]
+      - name: transaction_count
+        tests: [not_null]
+
+  # ------------------------------------------------------------------
+  - name: mart_loan_default_risk
+    description: Loan-level default/delinquency risk, enriched with province.
+    columns:
+      - name: loan_id
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_loans')
+                field: loan_id
+      - name: customer_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_customers')
+                field: customer_id
+
+  # ------------------------------------------------------------------
+  - name: mart_acquisition_channel_value
+    description: Channel-level customer value and retention metrics.
+    columns:
+      - name: acquisition_channel
+        tests: [unique, not_null]
+
+  # ------------------------------------------------------------------
+  - name: mart_customer_clv
+    description: Customer-level lifetime value score.
+    columns:
+      - name: customer_id
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_customers')
+                field: customer_id
+      - name: clv_score
+        tests: [not_null]
