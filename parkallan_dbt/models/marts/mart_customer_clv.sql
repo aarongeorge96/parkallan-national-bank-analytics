@@ -5,6 +5,7 @@ WITH customers AS (
 		first_name,
 		last_name,
 		customer_segment,
+		acquisition_channel,
 		is_active
 
 	FROM {{ ref('stg_customers') }}
@@ -60,6 +61,7 @@ raw_components AS (
 		c.first_name,
 		c.last_name,
 		c.customer_segment,
+		c.acquisition_channel,
 		c.is_active,
 		COALESCE(b.total_active_balance, 0) AS total_active_balance,
 		COALESCE(p.active_product_count, 0) AS active_product_count,
@@ -107,6 +109,7 @@ final AS (
 		first_name,
 		last_name,
 		customer_segment,
+		acquisition_channel,
 		total_active_balance,
 		transaction_count,
 		active_product_count,

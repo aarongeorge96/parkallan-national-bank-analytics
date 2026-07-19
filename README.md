@@ -1,6 +1,6 @@
 # Parkallan National Bank: Retail Analytics Platform
 
-A full-stack retail banking analytics project simulating the data infrastructure and analytical capabilities of a Canadian retail bank. Built to demonstrate end-to-end data skills across data modelling, SQL analytics, cloud data warehousing, and business intelligence.
+A full-stack retail banking analytics project simulating the data infrastructure and analytical capabilities of a Canadian retail bank. Built to demonstrate end-to-end data skills across data modelling, SQL analytics, cloud data warehousing, dbt-based transformation, and business intelligence.
 
 ---
 
@@ -8,7 +8,9 @@ A full-stack retail banking analytics project simulating the data infrastructure
 
 This project simulates the analytics environment of a Canadian retail bank called Parkallan National Bank. It covers the full data pipeline from raw data generation to executive dashboards, answering real business questions that analysts at institutions like TD, RBC, and Scotiabank work on daily.
 
-The project was built entirely from scratch including the data model design, synthetic data generation, cloud warehouse setup, SQL analytics layer, and Power BI dashboard.
+The project was built entirely from scratch, including the data model design, synthetic data generation, cloud warehouse setup, a dbt Core transformation layer (staging → intermediate → marts), and a Power BI dashboard connected directly to the transformed output.
+
+The transformation layer was deliberately rebuilt in dbt Core rather than left as a flat set of SQL queries, to demonstrate the data modelling discipline — layered architecture, reusable business logic, and automated testing — that differentiates this project from a typical BI-only portfolio piece.
 
 ---
 
@@ -18,7 +20,8 @@ The project was built entirely from scratch including the data model design, syn
 |---|---|
 | Data Generation | Python (Faker, Pandas, NumPy) |
 | Data Warehouse | Google BigQuery |
-| Analytics | SQL (CTEs, Window Functions, Aggregations) |
+| Transformation | dbt Core (staging, intermediate, and mart layers) |
+| Analytics / Testing | SQL (CTEs, window functions, aggregations) + 100 automated dbt tests |
 | Visualization | Microsoft Power BI Desktop |
 
 ---
@@ -29,17 +32,21 @@ The project was built entirely from scratch including the data model design, syn
 Parkallan-Analytics/
 │
 ├── data/
-│   └── generate_parkallan_data.py
+│   ├── generate_parkallan_data.py
+│   └── dim_date.csv                    (extended 2015–2023, see Data Model notes)
 │
-├── sql/
-│   ├── 01_customer_segment_profitability.sql
-│   ├── 02_product_crosssell_analysis.sql
-│   ├── 03_churn_risk_analysis.sql
-│   ├── 04_branch_performance.sql
-│   ├── 05_monthly_transaction_trends.sql
-│   ├── 06_loan_default_analysis.sql
-│   ├── 07_acquisition_channel_value.sql
-│   └── 08_customer_lifetime_value.sql
+├── parkallan_dbt/
+│   ├── dbt_project.yml
+│   └── models/
+│       ├── staging/                    (7 models — 1:1 cleaned/renamed raw tables)
+│       │   ├── _sources.yml
+│       │   ├── _staging.yml            (71 schema tests)
+│       │   └── stg_*.sql
+│       ├── intermediate/               (4 models — reusable business logic)
+│       │   └── int_*.sql
+│       └── marts/                      (9 models — BI-ready, one per business question)
+│           ├── _marts.yml              (29 schema tests)
+│           └── mart_*.sql
 │
 ├── powerbi/
 │   └── parkallan_dashboard.pbix
@@ -51,7 +58,7 @@ Parkallan-Analytics/
 
 ## Data Model
 
-The project follows a star schema design with three fact tables and four dimension tables.
+The project follows a star schema design with three fact tables and four dimension tables at the source layer.
 
 ### Dimension Tables
 
@@ -61,7 +68,7 @@ The project follows a star schema design with three fact tables and four dimensi
 
 **dim_location** covers branch and customer address locations across all Canadian provinces and territories, including region classification and neighbourhood income tier.
 
-**dim_date** provides a full date dimension for 2022 and 2023 including day, month, quarter, fiscal quarter, weekend flags, and Canadian statutory holidays.
+**dim_date** provides a full date dimension extended to cover **2015–2023** (originally 2022–2023 only — extended after dbt's automated `relationships` tests caught 9,437 accounts and 317 closures with open/close dates predating the original date range; see Testing section).
 
 ### Fact Tables
 
@@ -71,101 +78,84 @@ The project follows a star schema design with three fact tables and four dimensi
 
 **fact_loans** captures the full loan lifecycle from application through to repayment, including approval status, credit score at application, interest rate, outstanding balance, and delinquency status.
 
----
-
-## Data Generation
-
-Synthetic data was generated using Python to simulate realistic Canadian retail banking patterns. Key design decisions include:
-
-- Customer demographics calibrated against Statistics Canada provincial population distributions
-- Real Canadian cities, provinces, and postal codes across all 13 provinces and territories
-- Real Canadian merchants including Tim Hortons, Sobeys, Canadian Tire, Petro-Canada, and Air Canada
-- Canadian banking products including TFSA and RRSP which are unique to Canada
-- Credit scores following a normal distribution centred around 680, consistent with Canadian Equifax and TransUnion scoring ranges of 300 to 900
-- Transaction categories aligned with Canadian household spending patterns
-- Loan interest rates consistent with Canadian market rates for the 2022 to 2023 period
-
-The dataset contains 527,561 rows across seven tables.
+The dataset contains 527,561+ rows across seven raw tables (`dim_date` grew from 730 to 3,287 rows after the extension above).
 
 ---
 
-## SQL Analytics
+## dbt Transformation Layer
 
-Eight analytical queries were written to answer key business questions. All queries are stored in the sql directory and were executed in Google BigQuery.
+Raw BigQuery tables are transformed through three layers, each with a distinct purpose:
 
-### Query 01: Customer Segment Profitability
+### 1. Staging (7 models)
+1:1 cleaned and renamed versions of each raw table (`stg_customers`, `stg_date`, `stg_location`, `stg_products`, `stg_accounts`, `stg_loans`, `stg_transactions`). No business logic — just consistent naming and light type handling. Covered by **71 automated tests**: primary key uniqueness/not-null, foreign key relationship checks, and `accepted_values` checks against real distinct values pulled from the data (not guessed).
 
-Calculates total balance, average balance, and customer count by segment (Mass Market, Emerging Affluent, High Net Worth, Private Banking). Identifies which segments drive the most value for the bank.
+### 2. Intermediate (4 models)
+Reusable business logic computed once, referenced by multiple marts, so no calculation is duplicated across the codebase:
+- **`int_customer_activity`** — last transaction date and 90-day inactivity flag per customer
+- **`int_customer_product_counts`** — distinct active product count per customer, single-product-holder flag
+- **`int_loan_risk_flags`** — Canadian Equifax/TransUnion credit score banding, default/delinquency flags (approved loans only)
+- **`int_account_balances_by_customer`** — active vs. total balance aggregated per customer
 
-### Query 02: Product Cross-sell Analysis
+### 3. Marts (9 models)
+BI-ready tables, each shaped to a specific business question's grain, replacing the original 8 SQL queries and 2 BigQuery views:
 
-Three part analysis covering product adoption rates, average products per customer, and a product pair cross-sell matrix. Uses a self join on fact_accounts to identify the most common product combinations held by customers.
+| Mart | Grain | Replaces |
+|---|---|---|
+| `mart_segment_profitability` | 1 row per segment | Query 01 |
+| `mart_product_adoption` | 1 row per product | Query 02 (adoption) |
+| `mart_product_crosssell_pairs` | 1 row per product pair | Query 02 (cross-sell matrix) |
+| `mart_churn_risk` | 1 row per customer | Query 03 / `vw_churn_risk` |
+| `mart_branch_performance` | 1 row per branch | Query 04 |
+| `mart_monthly_transaction_trends` | 1 row per year-month | Query 05 |
+| `mart_loan_default_risk` | 1 row per approved loan | Query 06 |
+| `mart_acquisition_channel_value` | 1 row per channel | Query 07 |
+| `mart_customer_clv` | 1 row per customer | Query 08 / `vw_customer_clv` |
 
-### Query 03: Churn Risk Analysis
-
-Flags customers as churn risk based on three conditions: no transaction activity in the last 90 days of the dataset, single product holders, and inactive account status. Uses two chained CTEs and joins across four tables.
-
-### Query 04: Branch Performance
-
-Two part analysis covering account balances per branch and transaction volumes per branch, with a province level rollup for geographic reporting. Filters to branch locations only using the is_branch flag in dim_location.
-
-### Query 05: Monthly Transaction Trends
-
-Calculates monthly transaction volumes and amounts for 2022 and 2023, with month over month growth percentage calculated using the LAG window function. Joins fact_transactions to dim_date for clean date dimension filtering.
-
-### Query 06: Loan Default Analysis
-
-Three part risk analysis covering default rate by province, default rate by Canadian credit score band (Poor, Fair, Good, Very Good, Excellent), and a comparison of average credit scores between defaulted and current loans. Uses conditional COUNT aggregations and OSFI standard delinquency classifications.
-
-### Query 07: Acquisition Channel Value
-
-Compares the four acquisition channels (Branch, Online, Mobile App, Referral) across total customers, total balance, average balance, average products per customer, and active customer retention rate.
-
-### Query 08: Customer Lifetime Value
-
-Calculates a composite CLV score per customer using a weighted formula across five components: total account balance (40%), transaction engagement (20%), product depth (20%), outstanding loan value (15%), and active status bonus (5%). Uses three chained CTEs joining across all three fact tables.
+Each mart is intentionally self-contained (no relationships between marts) — a deliberate design tradeoff that keeps each business question isolated and simple to reason about, at the cost of losing automatic cross-slicing that a single shared fact table would give for free. Power BI relies on each mart carrying its own copy of dimension attributes (e.g. `customer_segment`, `province`, `product_name`) it needs, rather than joining across marts.
 
 ---
 
-## BigQuery Views
+## Testing
 
-Two views were created in BigQuery to pre-compute complex analytical scores for use in Power BI.
+**100 automated dbt tests** run across the pipeline (71 staging, 29 marts): primary key uniqueness and not-null checks, foreign key relationship checks, and `accepted_values` checks verified against real data rather than assumed.
 
-**vw_customer_clv** pre-computes the Customer Lifetime Value score for all 5,000 customers using the Query 08 formula. This avoids running a three CTE, four table join query on every dashboard refresh.
-
-**vw_churn_risk** pre-computes the churn risk flag and reason for all at-risk customers using the Query 03 logic. This encapsulates the business logic in a single reusable view accessible to any downstream tool.
+This wasn't just a checkbox — testing caught a real, previously undetected data issue: `dim_date` originally only covered 2022–2023, but accounts and loans in the data have open/close dates going back to 2015 (accounts predate the 2-year transaction window). The `relationships` test on `stg_accounts.open_date_id` and `.close_date_id` failed with 9,437 and 317 orphaned rows respectively — dead giveaways that would have silently broken any "accounts opened by year" analysis for anything before 2022. The date dimension was regenerated using the same holiday-calculation formula as the original (verified to reproduce the existing 2022–2023 rows exactly) and extended back to 2015-01-01.
 
 ---
 
 ## Power BI Dashboard
 
-The dashboard contains five pages connected directly to Google BigQuery via the native BigQuery connector in Power BI Desktop.
+The dashboard connects **exclusively to the 9 dbt marts** in BigQuery via Power BI's native BigQuery connector, in Import mode — no raw tables or legacy views remain connected in the model.
 
-**Page 1: Executive Overview** displays six KPI cards covering total customers, total balance, total transactions, total transaction amount, active customer rate, and churn risk count. Supported by a customer segment bar chart and monthly transaction trend line chart.
+**Page 1: Executive Overview** — total customers, total balance, total transactions, total transaction amount, active customer %, and churn risk count, alongside a segment balance breakdown and monthly transaction trend.
 
-**Page 2: Branch and Geography** features an interactive map of Canada with transaction volume bubbles by province, a total balance bar chart by province, and a top branch performance table. A region slicer allows filtering by Western Canada, Central Canada, Atlantic Canada, Prairie, and Northern regions.
+**Page 2: Branch and Geography** — interactive map of branch locations, balance and transaction volume by province, and a branch performance table, filterable by region.
 
-**Page 3: Product and Customer Analysis** covers cross-sell rate, average products per customer, customer segment distribution, product adoption rates, acquisition channel balance comparison, and a top 10 CLV customer table sourced from vw_customer_clv.
+**Page 3: Product and Customer Analysis** — cross-sell rate, average products per customer, segment distribution, product adoption rates, acquisition channel balance comparison, and a top-10 CLV customer table.
 
-**Page 4: Risk and Loan Analysis** displays overall default rate, total approved loans, default rate by province, default rate by Canadian credit score band, loan status breakdown, and loan performance by status.
+**Page 4: Risk and Loan Analysis** — default rate, total approved loans, default rate by province and by Canadian credit score band, and loan status breakdown.
 
-**Page 5: Customer Intelligence** presents average CLV score, CLV by customer segment, churn risk by segment, churn risk by acquisition channel, and a top 10 highest CLV customers table sourced from vw_customer_clv.
+**Page 5: Customer Intelligence** — average CLV score, CLV by segment, churn risk by segment and by acquisition channel, and a top-10 highest-CLV customer table.
 
 ---
 
 ## Key Business Insights
 
-The following insights were derived from the analytics layer and are reflected in the dashboard.
+*(Figures below reflect the dbt-marts-based dashboard; some differ from earlier flat-SQL figures due to two deliberate definition changes made during the rebuild — see notes.)*
 
-Chequing Account is held by 100% of customers confirming its role as the anchor product. All secondary products sit at approximately 25% adoption, indicating a significant cross-sell opportunity across the customer base.
+Chequing Account remains the anchor product at 100% adoption.
 
-The average customer holds 3.31 products, which is consistent with Canadian retail banking industry benchmarks of 3 to 4 products per customer.
+**Average products per customer is 3.05** (previously reported as 3.31). This is a deliberate correction, not a data change: the original figure counted *accounts* (`COUNT(fact_accounts)`), which double-counts a customer holding two accounts of the same product. The corrected figure counts *distinct product types* held, which is the more meaningful metric for cross-sell analysis.
 
-The overall loan default rate is 4.70%. Nunavut shows the highest provincial default rate at 6.45%, though the small loan book of 93 loans limits statistical reliability. British Columbia represents the highest risk by volume with 40 defaults across 932 approved loans.
+The overall loan default rate is **4.70%**, across 3,784 approved loans.
 
-Referral channel customers show the highest retention rate at 94.45% active, while Mobile App customers carry the highest average account balance at $82,563, suggesting this channel attracts higher value customers despite lower acquisition volume.
+Average CLV score across the customer base is **32.89** (0–100 scale, min-max normalized across balance, transaction engagement, product depth, outstanding loan value, and active-status components, weighted 40/20/20/15/5 per the original design).
 
-The top CLV customer, Richard Kidd, is classified as Emerging Affluent rather than High Net Worth, demonstrating that individual customer behaviour is a stronger predictor of value than segment label alone.
+**92.34%** of customers are in active relationship status, with **549 customers** flagged as churn risk (inactive 90+ days, single-product holders, or inactive relationship status).
+
+Total transaction volume across the dataset is 500,000 transactions totaling **$343.17M**, against a total book balance of **$1.23bn** (active accounts only — see note below).
+
+> **Note on balance figures:** current mart-based `total_balance` reflects active accounts only, whereas the original flat-SQL figure summed all accounts including closed ones. Closed-account balances are typically near-zero, so the difference is expected to be small.
 
 ---
 
@@ -175,6 +165,7 @@ The top CLV customer, Richard Kidd, is classified as Emerging Affluent rather th
 
 - Python 3.8 or higher
 - Google Cloud account with BigQuery enabled
+- dbt Core with the `dbt-bigquery` adapter (`pip install dbt-core dbt-bigquery`)
 - Power BI Desktop (free download from Microsoft)
 
 ### Step 1: Generate the Data
@@ -184,26 +175,32 @@ pip install faker pandas numpy
 python data/generate_parkallan_data.py
 ```
 
-This generates seven CSV files in a parkallan_data directory.
+This generates seven CSV files in a `parkallan_data` directory. Use the extended `dim_date.csv` included in this repo (2015–2023) rather than regenerating it, unless you also update the generation script's date range.
 
 ### Step 2: Load to BigQuery
 
-1. Create a Google Cloud project
-2. Create a BigQuery dataset named parkallan_national_bank
-3. Upload each CSV file as a new table using the BigQuery console
-4. Enable auto-detect schema during upload
+1. Create a Google Cloud project.
+2. Create a BigQuery dataset named `parkallan_national_bank`.
+3. Upload each CSV file as a new table using the BigQuery console, with auto-detect schema enabled.
 
-### Step 3: Create BigQuery Views
+### Step 3: Run the dbt Pipeline
 
-Run the CREATE VIEW statements from queries 03 and 08 in the BigQuery console to create vw_churn_risk and vw_customer_clv.
+```bash
+cd parkallan_dbt
+dbt deps          # if using any packages
+dbt run           # builds all staging, intermediate, and mart models
+dbt test          # runs all 100 schema tests
+```
+
+Requires a `profiles.yml` configured with a BigQuery service account (see `parkallan_dbt/README.md` for the standard dbt-generated setup guide).
 
 ### Step 4: Connect Power BI
 
-1. Open Power BI Desktop
-2. Click Get Data and select Google BigQuery
-3. Sign in with your Google account
-4. Select all seven tables and two views from parkallan_national_bank
-5. Click Load and select Import mode
+1. Open Power BI Desktop.
+2. Click **Get Data** → **Google BigQuery** → sign in.
+3. Select the **9 mart tables only** (`mart_segment_profitability`, `mart_product_adoption`, `mart_product_crosssell_pairs`, `mart_churn_risk`, `mart_branch_performance`, `mart_monthly_transaction_trends`, `mart_loan_default_risk`, `mart_acquisition_channel_value`, `mart_customer_clv`) from `parkallan_national_bank`.
+4. Click **Load**, choose **Import** mode.
+5. Marts are intentionally unrelated to each other in the data model — do not let Power BI auto-create relationships between them; verify in Model view that no mart-to-mart relationship lines exist.
 
 ---
 
@@ -215,4 +212,4 @@ This project was built with Canadian banking regulations and products in mind. K
 
 ## Author
 
-Built as a portfolio project demonstrating end-to-end data analytics skills targeting Business Analyst and Data Analyst roles in the Canadian financial services sector.
+Built as a portfolio project demonstrating end-to-end data analytics and data engineering skills — data modelling, dbt-based transformation architecture, automated testing, and BI development — targeting Business Analyst and Data Analyst roles in the Canadian financial services sector.
