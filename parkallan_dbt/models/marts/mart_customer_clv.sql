@@ -2,6 +2,8 @@ WITH customers AS (
 
 	SELECT
 		customer_id,
+		first_name,
+		last_name,
 		customer_segment,
 		is_active
 
@@ -31,9 +33,6 @@ products AS (
 
 transaction_counts AS (
 
-	-- transaction engagement: raw count of transactions per customer.
-	-- Computed here rather than as its own intermediate model given time constraints;
-	-- worth promoting to int_customer_transaction_counts if this logic gets reused elsewhere.
 	SELECT
 		customer_id,
 		COUNT(*) AS transaction_count
@@ -58,6 +57,8 @@ raw_components AS (
 
 	SELECT
 		c.customer_id,
+		c.first_name,
+		c.last_name,
 		c.customer_segment,
 		c.is_active,
 		COALESCE(b.total_active_balance, 0) AS total_active_balance,
@@ -75,8 +76,6 @@ raw_components AS (
 
 normalized AS (
 
-	-- min-max scaling to 0-100 for each raw component, so wildly different units
-	-- (dollars, counts) can be combined into one weighted score.
 	SELECT
 		*,
 		SAFE_DIVIDE(
@@ -105,6 +104,8 @@ final AS (
 
 	SELECT
 		customer_id,
+		first_name,
+		last_name,
 		customer_segment,
 		total_active_balance,
 		transaction_count,

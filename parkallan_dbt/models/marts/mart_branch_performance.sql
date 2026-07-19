@@ -16,7 +16,8 @@ branch_balances AS (
 	SELECT
 		location_id,
 		SUM(CASE WHEN account_status = 'Active' THEN current_balance ELSE 0 END) AS total_active_balance,
-		COUNT(DISTINCT customer_id) AS customer_count
+		COUNT(DISTINCT customer_id) AS customer_count,
+		COUNT(*) AS total_account_count
 
 	FROM {{ ref('stg_accounts') }}
 	GROUP BY location_id
@@ -44,6 +45,7 @@ final AS (
 		b.region,
 		COALESCE(bb.total_active_balance, 0) AS total_active_balance,
 		COALESCE(bb.customer_count, 0) AS customer_count,
+		COALESCE(bb.total_account_count, 0) AS total_account_count,
 		COALESCE(bt.transaction_count, 0) AS transaction_count,
 		COALESCE(bt.total_transaction_amount, 0) AS total_transaction_amount
 

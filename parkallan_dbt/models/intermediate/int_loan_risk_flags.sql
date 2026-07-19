@@ -8,7 +8,8 @@ WITH approved_loans AS (
 		credit_score_at_application,
 		loan_status,
 		outstanding_balance,
-		days_past_due
+		days_past_due,
+		interest_rate
 
 	FROM {{ ref('stg_loans') }}
 	WHERE approval_status = 'Approved'
@@ -26,6 +27,7 @@ final AS (
 		loan_status,
 		outstanding_balance,
 		days_past_due,
+		interest_rate,
 		CASE
 			WHEN credit_score_at_application < 580 THEN 'Poor'
 			WHEN credit_score_at_application < 670 THEN 'Fair'

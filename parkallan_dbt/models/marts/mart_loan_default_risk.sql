@@ -8,6 +8,7 @@ WITH loans AS (
 		credit_score_band,
 		loan_status,
 		outstanding_balance,
+		interest_rate,
 		is_defaulted,
 		is_delinquent,
 		is_at_risk
@@ -38,6 +39,7 @@ final AS (
 		l.credit_score_band,
 		l.loan_status,
 		l.outstanding_balance,
+		l.interest_rate,
 		l.is_defaulted,
 		l.is_delinquent,
 		l.is_at_risk
